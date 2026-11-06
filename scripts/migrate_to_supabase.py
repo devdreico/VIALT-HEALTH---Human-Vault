@@ -9,8 +9,11 @@ before the explicit --apply mode, and use a database backup.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import uuid
@@ -18,15 +21,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "backend"
-sys.path.insert(0, str(BACKEND))
+import httpx
+import yaml
 
-httpx: Any
-settings: Any
-list_vaults: Any
-read_md: Any
-vault_dir: Any
+ROOT = Path(__file__).resolve().parents[1]
+LEGACY_DATA = ROOT / "backend" / "data"
+DATABASE = Path(os.environ.get("VIALT_DB_FILE", LEGACY_DATA / "vialt.db"))
+VAULTS_DIR = Path(os.environ.get("VIALT_VAULTS_DIR", LEGACY_DATA / "vaults"))
+VAULT_SECRET = os.environ.get("VIALT_VAULT_SECRET", "")
+ENC_PREFIX = "ENCv1:"
 
 _NAMESPACE = uuid.UUID("4749414c-542d-4c54-9e7e-544d4f555345")
 _BATCH_SIZE = 100
@@ -54,6 +57,59 @@ def frontmatter(path: Path) -> dict[str, Any]:
         return {}
     value = document.get("frontmatter") or {}
     return value if isinstance(value, dict) else {}
+
+
+def read_md(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    if raw.startswith(ENC_PREFIX):
+        if not VAULT_SECRET:
+            raise RuntimeError(
+                f"El archivo {path.name} está cifrado; define VIALT_VAULT_SECRET para importarlo"
+            )
+        from cryptography.fernet import Fernet
+
+        key = base64.urlsafe_b64encode(hashlib.sha256(VAULT_SECRET.encode()).digest())
+        try:
+            raw = Fernet(key).decrypt(raw[len(ENC_PREFIX):].encode()).decode("utf-8")
+        except Exception as error:
+            raise RuntimeError(f"No se pudo descifrar {path.name}; verifica VIALT_VAULT_SECRET") from error
+
+    match = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", raw, re.DOTALL)
+    if not match:
+        return {"frontmatter": {}, "body": raw}
+    try:
+        metadata = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError as error:
+        raise RuntimeError(f"Frontmatter YAML inválido en {path.name}") from error
+    return {
+        "frontmatter": metadata if isinstance(metadata, dict) else {},
+        "body": match.group(2).lstrip("\n"),
+    }
+
+
+def vault_dir(user_id: str, slug: str = "") -> Path:
+    return VAULTS_DIR / user_id / slug
+
+
+def list_vaults(user_id: str) -> list[dict[str, Any]]:
+    root = vault_dir(user_id)
+    if not root.is_dir():
+        return []
+    result = []
+    for directory in sorted(root.iterdir(), key=lambda item: item.name):
+        metadata = frontmatter(directory / "vialt.md") if directory.is_dir() else {}
+        if metadata:
+            result.append({
+                "slug": directory.name,
+                "nombre": metadata.get("nombre") or directory.name,
+                "tipo": metadata.get("tipo", "persona"),
+                "creado": metadata.get("creado"),
+                "actualizado": metadata.get("actualizado"),
+            })
+    return result
 
 
 def read_users(database: Path) -> list[dict[str, Any]]:
@@ -167,26 +223,15 @@ def main() -> int:
     parser.add_argument("--supabase-url", default=None)
     args = parser.parse_args()
 
-    global httpx, settings, list_vaults, read_md, vault_dir
-    import httpx as httpx_module
-    from app.config import settings as app_settings
-    from app.services.mdfiles import list_vaults as list_vaults_fn
-    from app.services.mdfiles import read_md as read_md_fn
-    from app.services.mdfiles import vault_dir as vault_dir_fn
-
-    httpx = httpx_module
-    settings = app_settings
-    list_vaults = list_vaults_fn
-    read_md = read_md_fn
-    vault_dir = vault_dir_fn
-    args.database = args.database or settings.db_file
-    args.vaults = args.vaults or settings.vaults_dir
+    global VAULTS_DIR
+    args.database = args.database or DATABASE
+    args.vaults = args.vaults or VAULTS_DIR
 
     if not args.database.is_file():
         parser.error(f"No existe la base SQLite: {args.database}")
     if not args.vaults.is_dir():
         parser.error(f"No existe el directorio de vaults: {args.vaults}")
-    settings.vaults_dir = args.vaults
+    VAULTS_DIR = args.vaults
 
     users = read_users(args.database)
     messages = read_chat(args.database)

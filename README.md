@@ -1,6 +1,6 @@
 # VIALT
 
-VIALT es una aplicación Vite/React para administrar vaults médicos personales. La arquitectura nueva usa Supabase Auth, Postgres con Row Level Security y Edge Functions para el chat en streaming. FastAPI/SQLite/Markdown quedan como origen legado para exportar y migrar datos existentes; ya no forman parte del despliegue web.
+VIALT es una aplicación Vite/React para administrar vaults médicos personales. La arquitectura usa Supabase Auth, Postgres con Row Level Security y Edge Functions para el chat en streaming. SQLite y Markdown se conservan únicamente como formatos de origen para importar datos existentes.
 
 ## Desarrollo local
 
@@ -53,7 +53,7 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
-Vercel compila la aplicación Vite desde `frontend/`; configura las mismas dos variables `VITE_SUPABASE_*` en cada entorno. El backend Python anterior no se despliega como API por Vercel.
+En Vercel configura **Root Directory = `frontend`**; el único `vercel.json` usa comandos relativos a esa raíz (`npm ci`, `npm run build`, `dist`). Define `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en cada entorno. El repo se publica como una sola SPA y no despliega un servidor Python.
 
 También puedes servir el mismo bundle Vite detrás de Caddy en un VPS:
 
@@ -63,10 +63,10 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-El contenedor solo sirve archivos estáticos y no ejecuta FastAPI ni da acceso a Ollama. Las Edge Functions se despliegan a Supabase por separado.
+El contenedor solo sirve archivos estáticos y no ejecuta una API propia ni da acceso directo a Ollama. Las Edge Functions se despliegan a Supabase por separado.
 
 ## Migración desde VIALT legado
 
 No apuntes la aplicación nueva al SQLite o a los `.md` antiguos. Haz un backup de `backend/data/`, prepara Supabase Auth para las cuentas existentes y migra perfiles/vaults/chat mediante un proceso de importación administrativa con `service_role` fuera del navegador. Los hashes bcrypt del sistema anterior no deben copiarse a Supabase sin validar compatibilidad; prepara restablecimiento de contraseña o un flujo transitorio de migración de credenciales. Coteja conteos, slugs, consentimiento y muestras clínicas antes del corte, y conserva el sistema antiguo en solo lectura hasta verificar el rollback.
 
-El importador administrativo es `backend/scripts/migrate_to_supabase.py`. Instala primero con `python3 -m pip install -r backend/requirements.txt`, configura `VIALT_DB_FILE`/`VIALT_VAULTS_DIR` si no usas las rutas predeterminadas y ejecuta la simulación. Para aplicar, exporta `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`, y añade `--apply`. El importador no crea usuarios ni importa contraseñas; todas las cuentas deben existir y verificarse en Supabase Auth. Ejecútalo antes de permitir nuevas escrituras en la aplicación.
+El importador administrativo es `scripts/migrate_to_supabase.py`. Instala sus dependencias con `python3 -m pip install -r scripts/requirements-migration.txt`, configura `VIALT_DB_FILE`/`VIALT_VAULTS_DIR` si no usas las rutas legadas predeterminadas bajo `backend/data/` y ejecuta la simulación. Para aplicar, exporta `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`, y añade `--apply`. El importador no crea usuarios ni importa contraseñas; todas las cuentas deben existir y verificarse en Supabase Auth. Ejecútalo antes de permitir nuevas escrituras en la aplicación.
