@@ -25,6 +25,55 @@ interface Source {
   snippet: string;
 }
 
+type Provider = "openrouter" | "ollama";
+
+function decodeBase64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
+async function decryptUserKey(ciphertext: string, nonce: string, secret: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  const key = await crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["decrypt"]);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: decodeBase64(nonce).buffer as ArrayBuffer },
+    key,
+    decodeBase64(ciphertext).buffer as ArrayBuffer,
+  );
+  return new TextDecoder().decode(plaintext);
+}
+
+function parseProviderLine(
+  line: string,
+  provider: Provider,
+): { token?: string; done?: boolean } | null {
+  if (provider === "openrouter") {
+    if (!line.startsWith("data: ")) return null;
+    const data = line.slice(6).trim();
+    if (data === "[DONE]") return { done: true };
+    try {
+      const chunk = JSON.parse(data) as {
+        choices?: { delta?: { content?: unknown }; finish_reason?: unknown }[];
+      };
+      const choice = chunk.choices?.[0];
+      return {
+        token: typeof choice?.delta?.content === "string" ? choice.delta.content : undefined,
+        done: Boolean(choice?.finish_reason),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  if (!line.trim()) return null;
+  try {
+    const chunk = JSON.parse(line) as Record<string, unknown>;
+    const token = (chunk.message as { content?: unknown } | undefined)?.content;
+    return { token: typeof token === "string" ? token : undefined, done: chunk.done === true };
+  } catch {
+    return null;
+  }
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -181,9 +230,40 @@ Deno.serve(async (request) => {
     }
   }
 
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) return jsonResponse({ error: "No se pudo cargar la configuración de IA" }, 503);
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: credential, error: credentialError } = await admin.from("user_ai_credentials")
+    .select("provider, ciphertext, nonce")
+    .eq("owner_id", authData.user.id)
+    .maybeSingle();
+  if (credentialError) return jsonResponse({ error: "No se pudo cargar la configuración de IA" }, 503);
+
+  let openRouterApiKey: string | null = null;
+  if (credential) {
+    const encryptionSecret = Deno.env.get("VIALT_KEY_ENCRYPTION_SECRET");
+    if (!encryptionSecret) return jsonResponse({ error: "El descifrado de la clave no está configurado" }, 503);
+    try {
+      openRouterApiKey = await decryptUserKey(
+        credential.ciphertext,
+        credential.nonce,
+        encryptionSecret,
+      );
+    } catch {
+      return jsonResponse({ error: "No se pudo descifrar la clave OpenRouter" }, 503);
+    }
+  }
+
+  const provider: Provider = openRouterApiKey ? "openrouter" : "ollama";
+  const model = openRouterApiKey
+    ? "openai/gpt-oss-120b"
+    : Deno.env.get("VIALT_OLLAMA_MODEL") ?? "qwen2.5:3b";
   const ollamaUrl = Deno.env.get("VIALT_OLLAMA_URL");
-  const model = Deno.env.get("VIALT_OLLAMA_MODEL") ?? "qwen2.5:3b";
-  if (!ollamaUrl) return jsonResponse({ error: "El proveedor de IA no está configurado" }, 503);
+  if (provider === "ollama" && !ollamaUrl) {
+    return jsonResponse({ error: "Configura tu clave OpenRouter o el proveedor Ollama" }, 503);
+  }
 
   const webContext = sources.length
     ? `\nResultados web (cita el dominio entre corchetes):\n${sources.map((source) => `- ${source.title}: ${source.snippet} (${source.url})`).join("\n")}`
@@ -194,30 +274,46 @@ Deno.serve(async (request) => {
     { role: "user", content: message },
   ];
 
-  const ollamaBase = ollamaUrl.replace(/\/$/, "");
-  const ollamaApiKey = Deno.env.get("VIALT_OLLAMA_API_KEY");
   let upstream: Response;
   try {
-    upstream = await fetch(`${ollamaBase}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(ollamaApiKey ? { Authorization: `Bearer ${ollamaApiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        keep_alive: "15m",
-        options: { temperature: 0.6, num_predict: 180, num_ctx: 4096 },
-      }),
-      signal: AbortSignal.timeout(120000),
-    });
+    if (provider === "openrouter" && openRouterApiKey) {
+      upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openRouterApiKey}`,
+          "HTTP-Referer": Deno.env.get("VIALT_SITE_URL") ?? "https://vialts.presentto.online",
+          "X-Title": "VIALT",
+        },
+        body: JSON.stringify({ model, messages, stream: true, max_tokens: 220 }),
+        signal: AbortSignal.timeout(120000),
+      });
+    } else {
+      const ollamaApiKey = Deno.env.get("VIALT_OLLAMA_API_KEY");
+      upstream = await fetch(`${ollamaUrl!.replace(/\/$/, "")}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(ollamaApiKey ? { Authorization: `Bearer ${ollamaApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+          keep_alive: "15m",
+          options: { temperature: 0.6, num_predict: 180, num_ctx: 4096 },
+        }),
+        signal: AbortSignal.timeout(120000),
+      });
+    }
   } catch {
     return jsonResponse({ error: "No se pudo conectar con el proveedor de IA" }, 502);
   }
   if (!upstream.ok || !upstream.body) {
+    const status = upstream.status;
     await upstream.body?.cancel();
+    if (status === 402) return jsonResponse({ error: "La cuenta OpenRouter no tiene saldo disponible" }, 402);
+    if (status === 429) return jsonResponse({ error: "OpenRouter tiene demasiadas solicitudes; intenta de nuevo" }, 429);
     return jsonResponse({ error: "El proveedor de IA no está disponible" }, 502);
   }
 
@@ -238,26 +334,34 @@ Deno.serve(async (request) => {
   let complete = "";
   let finished = false;
 
+  const finishStream = async (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (finished) return;
+    finished = true;
+    if (complete.trim()) {
+      const { error: saveAssistantError } = await supabase.from("chat_messages").insert({
+        owner_id: authData.user.id,
+        vialt_id: vialt.id,
+        role: "assistant",
+        content: complete.slice(0, 12000),
+        sources,
+      });
+      if (saveAssistantError) {
+        controller.enqueue(streamEvent("error", "No se pudo guardar la respuesta"));
+      } else {
+        controller.enqueue(streamEvent("done", { log: null, sources, provider, model }));
+      }
+    } else {
+      controller.enqueue(streamEvent("error", "El modelo no produjo respuesta"));
+    }
+    controller.close();
+  };
+
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const { done, value } = await reader.read();
         if (done) {
-          if (complete.trim()) {
-            const { error: saveAssistantError } = await supabase.from("chat_messages").insert({
-              owner_id: authData.user.id,
-              vialt_id: vialt.id,
-              role: "assistant",
-              content: complete.slice(0, 12000),
-              sources,
-            });
-            if (saveAssistantError) throw new Error("No se pudo guardar la respuesta");
-            controller.enqueue(streamEvent("done", { log: null, sources }));
-          } else {
-            controller.enqueue(streamEvent("error", "El modelo no produjo respuesta"));
-          }
-          controller.close();
-          finished = true;
+          await finishStream(controller);
           return;
         }
 
@@ -265,33 +369,14 @@ Deno.serve(async (request) => {
         const lines = pending.split("\n");
         pending = lines.pop() ?? "";
         for (const line of lines) {
-          if (!line.trim()) continue;
-          let chunk: Record<string, unknown>;
-          try {
-            chunk = JSON.parse(line) as Record<string, unknown>;
-          } catch {
-            continue;
+          const parsed = parseProviderLine(line, provider);
+          if (parsed?.token) {
+            complete += parsed.token;
+            controller.enqueue(streamEvent("token", parsed.token));
           }
-          const token = (chunk.message as { content?: unknown } | undefined)?.content;
-          if (typeof token === "string" && token) {
-            complete += token;
-            controller.enqueue(streamEvent("token", token));
-          }
-          if (chunk.done === true) {
+          if (parsed?.done) {
             await reader.cancel();
-            if (complete.trim()) {
-              const { error: saveAssistantError } = await supabase.from("chat_messages").insert({
-                owner_id: authData.user.id,
-                vialt_id: vialt.id,
-                role: "assistant",
-                content: complete.slice(0, 12000),
-                sources,
-              });
-              if (saveAssistantError) throw new Error("No se pudo guardar la respuesta");
-              controller.enqueue(streamEvent("done", { log: null, sources }));
-            }
-            controller.close();
-            finished = true;
+            await finishStream(controller);
             return;
           }
         }

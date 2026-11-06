@@ -26,6 +26,7 @@ export default function ChatPage() {
   const [savingGoal, setSavingGoal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nombre, setNombre] = useState<string>("…");
+  const [modelLabel, setModelLabel] = useState("Cargando agente…");
   const endRef = useRef<HTMLDivElement>(null);
   const prefillSent = useRef(false);
 
@@ -81,6 +82,11 @@ export default function ChatPage() {
         .getVialt(slug)
         .then((d) => alive && setNombre(d.summary.nombre))
         .catch(() => undefined);
+      api.getOpenRouterKeyStatus()
+        .then((status) => alive && setModelLabel(
+          status.configured ? "OpenRouter · GPT-OSS 120B" : "Configura tu proveedor de IA",
+        ))
+        .catch(() => alive && setModelLabel("Configura tu proveedor de IA"));
     })();
     return () => {
       alive = false;
@@ -128,15 +134,20 @@ export default function ChatPage() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">
-            💬 IA médica · {nombre}
+            💬 {modelLabel} · {nombre}
           </h1>
           <p className="text-xs text-muted">
             analiza el vault autorizado · recomienda · sin diagnósticos
           </p>
         </div>
-        <Link to={`/vialt/${slug}`} className="shrink-0 text-xs text-accent hover:underline">
-          ← Vault
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <Link to="/configuracion-ia" className="text-xs text-accent hover:underline">
+            Configurar IA
+          </Link>
+          <Link to={`/vialt/${slug}`} className="text-xs text-accent hover:underline">
+            ← Vault
+          </Link>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-border bg-surface p-4">

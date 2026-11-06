@@ -12,6 +12,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const OpenRouterSettingsPage = lazy(() => import("./pages/OpenRouterSettingsPage"));
 const VialtDetailPage = lazy(() => import("./pages/VialtDetailPage"));
 
 export default function App() {
@@ -68,6 +69,7 @@ export default function App() {
               <Route path="/vialt/:slug" element={<VialtDetailPage />} />
               <Route path="/vialt/:slug/ia" element={<ChatPage />} />
               <Route path="/estado" element={<EstadoPage />} />
+              <Route path="/configuracion-ia" element={<OpenRouterSettingsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Route>

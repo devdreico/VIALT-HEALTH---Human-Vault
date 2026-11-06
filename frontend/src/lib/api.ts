@@ -80,6 +80,12 @@ export interface GoalItem {
   creado?: string;
 }
 
+export interface OpenRouterKeyStatus {
+  configured: boolean;
+  provider: "openrouter" | null;
+  model: string | null;
+}
+
 export interface ChatMsg {
   role: "user" | "assistant";
   content: string;
@@ -251,6 +257,31 @@ async function loadVault(slug: string): Promise<{
 }
 
 export const api = {
+  getOpenRouterKeyStatus: async (): Promise<OpenRouterKeyStatus> => {
+    const { data, error } = await supabase.functions.invoke<OpenRouterKeyStatus>("openrouter-key", {
+      method: "GET",
+    });
+    throwIfError(error);
+    return data as OpenRouterKeyStatus;
+  },
+
+  saveOpenRouterKey: async (apiKey: string, confirmMedicalDataTransfer: boolean) => {
+    const { data, error } = await supabase.functions.invoke<OpenRouterKeyStatus>("openrouter-key", {
+      method: "POST",
+      body: { apiKey, confirmMedicalDataTransfer },
+    });
+    throwIfError(error);
+    return data as OpenRouterKeyStatus;
+  },
+
+  removeOpenRouterKey: async () => {
+    const { data, error } = await supabase.functions.invoke<OpenRouterKeyStatus>("openrouter-key", {
+      method: "DELETE",
+    });
+    throwIfError(error);
+    return data as OpenRouterKeyStatus;
+  },
+
   getHealth: async () => {
     const { data, error } = await supabase.functions.invoke<Health>("system-health", {
       method: "GET",

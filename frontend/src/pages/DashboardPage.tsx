@@ -64,12 +64,20 @@ export default function DashboardPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">{user?.id ? user.email : "cargando…"}</p>
         </div>
-        <button
-          onClick={logout}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-text"
-        >
-          Salir
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/configuracion-ia"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-text"
+          >
+            Configurar IA
+          </Link>
+          <button
+            onClick={logout}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-text"
+          >
+            Salir
+          </button>
+        </div>
       </div>
 
       {onboarded === false && (

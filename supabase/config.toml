@@ -3,5 +3,38 @@ project_id = "vialts"
 [functions.chat]
 verify_jwt = true
 
+[functions.openrouter-key]
+verify_jwt = true
+
 [functions.system-health]
 verify_jwt = false
+
+[auth]
+additional_redirect_urls = ["https://vialts-devdreico.vercel.app/", "https://vialts-devdreico.vercel.app/**", "https://vialts-*-devdreico.vercel.app", "https://vialts-*-devdreico.vercel.app/**", "https://vialts-ai-devdreico.vercel.app/", "https://vialts-ai-devdreico.vercel.app/**", "https://vialts-*-ai-devdreico.vercel.app", "https://vialts-*-ai-devdreico.vercel.app/**", "https://vialts.presentto.online", "https://vialts.presentto.online/**", "https://vialts.presentto.online/auth/success", "https://vialts.presentto.online/auth/reset-password", "http://localhost:5173/auth/success", "http://localhost:5173/auth/reset-password"]
+site_url = "https://vialts.presentto.online"
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[auth.sms]
+enable_confirmations = true
+
+[auth.external.google]
+client_id = "vialts.presentto.online"
+enabled = true
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[db.pooler]
+default_pool_size = 15
+max_client_conn = 200
+
+[db.ssl_enforcement]
+enabled = true
+
+[storage.vector]
+enabled = false
