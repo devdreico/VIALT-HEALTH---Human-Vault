@@ -51,7 +51,12 @@ export default function LoginPage() {
       });
       if (authError) throw authError;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar OAuth con Google.");
+      const detail = err instanceof Error ? err.message : "";
+      setError(
+        /missing OAuth secret|provider is not enabled|unsupported provider/i.test(detail)
+          ? "Google OAuth no está terminado en Supabase: faltan el Client ID y el Client Secret de Google."
+          : detail || "No se pudo iniciar OAuth con Google.",
+      );
       setGoogleEnabled(true);
     }
   }
