@@ -1,10 +1,15 @@
-# Termina TLS automático (Let's Encrypt) y sirve la API VIALT.
+# Sirve la aplicación Vite compilada; datos y funciones viven en Supabase.
 {$VIALT_DOMAIN} {
 	encode zstd gzip
-	reverse_proxy api:8000
+	root * /srv
+	try_files {path} /index.html
+	file_server
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
 		-Server
 	}
 }

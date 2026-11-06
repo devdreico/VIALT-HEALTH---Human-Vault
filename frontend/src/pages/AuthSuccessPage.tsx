@@ -6,31 +6,19 @@ import { useAuth } from "../stores/auth";
 /** Recibe el token tras el callback de Google: /auth/success#token=… */
 export default function AuthSuccessPage() {
   const navigate = useNavigate();
+  const initialized = useAuth((s) => s.initialized);
+  const user = useAuth((s) => s.user);
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
-    if (!token) {
+    if (!initialized) return;
+    if (!user) {
       navigate("/login", { replace: true });
       return;
     }
-    async function finish() {
-      if (!token) return;
-      try {
-        useAuth.getState().setAuth(token, {
-          id: "",
-          email: "",
-          nombre: "…",
-        });
-        const me = await api.me(); // valida el token y trae los datos reales
-        useAuth.getState().setUser(me);
-        navigate("/", { replace: true });
-      } catch {
-        useAuth.getState().clear();
-        navigate("/login", { replace: true });
-      }
-    }
-    finish();
-  }, [navigate]);
+    api.onboardingStatus()
+      .then(({ completado }) => navigate(completado ? "/" : "/onboarding", { replace: true }))
+      .catch(() => navigate("/onboarding", { replace: true }));
+  }, [initialized, navigate, user]);
 
-  return <Navigate to="/login" replace />;
+  return initialized && !user ? <Navigate to="/login" replace /> : null;
 }

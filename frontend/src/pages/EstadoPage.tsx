@@ -56,12 +56,12 @@ export default function EstadoPage() {
 
       <div className="mt-8 rounded-2xl border border-border bg-surface px-5 py-2">
         <Row
-          label="API backend (FastAPI)"
+          label="Supabase"
           ok={health ? health.status === "ok" : apiDown ? false : null}
           detail={health ? health.app : apiDown ? "sin respuesta" : undefined}
         />
         <Row
-          label="IA local (Ollama)"
+          label="Proveedor de IA (Ollama)"
           ok={health ? health.ollama.connected : null}
           detail={
             health?.ollama.connected
@@ -75,9 +75,9 @@ export default function EstadoPage() {
           detail={health ? health.ollama_model : undefined}
         />
         <Row
-          label="Vault de datos (.md)"
-          ok={health ? true : null}
-          detail={health?.vaults_dir}
+          label="Base de datos y autenticación"
+          ok={health ? health.status === "ok" : null}
+          detail={health?.app}
         />
       </div>
 

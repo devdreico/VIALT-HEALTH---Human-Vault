@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type VaultSummary } from "../lib/api";
+import { supabase } from "../lib/supabase";
 import { useAuth } from "../stores/auth";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const user = useAuth((s) => s.user);
-  const token = useAuth((s) => s.token);
   const [vialts, setVialts] = useState<VaultSummary[] | null>(null);
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [newName, setNewName] = useState("");
@@ -14,9 +14,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (useAuth.getState().user?.id === "") {
-      api.me().then(useAuth.getState().setUser).catch(() => undefined);
-    }
     api.onboardingStatus().then((s) => setOnboarded(s.completado)).catch(() => setOnboarded(false));
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,8 +44,13 @@ export default function DashboardPage() {
   }
 
   async function logout() {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      setError(signOutError.message);
+      return;
+    }
     useAuth.getState().clear();
-    window.location.replace("/login");
+    navigate("/login", { replace: true });
   }
 
   const nombre = user?.id ? user.nombre.split(" ")[0] : "…";
@@ -147,13 +149,11 @@ export default function DashboardPage() {
       </div>
 
       <p className="mt-10 text-center text-xs text-muted">
-        Fase siguiente: chat con la IA local y puntaje de salud ·{" "}
+        Datos protegidos con controles de acceso por cuenta ·{" "}
         <Link to="/estado" className="hover:underline">
           estado del sistema
         </Link>
       </p>
-      {/* token interno — verificado por Fase 1 */}
-      <span className="hidden">{token ? "sesión activa" : ""}</span>
     </main>
   );
 }

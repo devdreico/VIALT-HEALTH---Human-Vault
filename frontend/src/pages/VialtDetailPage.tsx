@@ -122,7 +122,7 @@ export default function VialtDetailPage() {
         to={`/vialt/${slug}/ia`}
         className="mt-6 flex items-center justify-between rounded-2xl bg-accent px-5 py-4 text-sm font-medium text-white"
       >
-        <span>💬 Conversar con la IA médica local</span>
+        <span>💬 Conversar con la IA médica</span>
         <span className="opacity-80">leer vault · recomendar →</span>
       </Link>
 
@@ -292,8 +292,7 @@ export default function VialtDetailPage() {
       </section>
 
       <p className="mt-8 text-center text-xs text-muted">
-        Vault físico: <code>data/vaults/…/{slug}/*.md</code> · las ediciones
-        granulares por archivo y el chat de IA llegan en las siguientes fases.
+        Datos guardados en Supabase · este vault es visible únicamente para la cuenta propietaria.
       </p>
     </main>
   );

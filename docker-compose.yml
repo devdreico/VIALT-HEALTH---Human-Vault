@@ -1,52 +1,23 @@
-# VIALT — stack de producción para VPS (Docker Compose)
-# Copia .env.example → .env, ajusta dominios/secreto y ejecuta:
-#   docker compose up -d --build
-#   docker compose exec ollama ollama pull qwen2.5:3b
-
 name: vialt
 
 services:
-  caddy:
-    image: caddy:2-alpine
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?Define VITE_SUPABASE_URL en .env}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?Define VITE_SUPABASE_ANON_KEY en .env}
     restart: unless-stopped
-    ports: ["80:80", "443:443"]
+    ports:
+      - "80:80"
+      - "443:443"
     environment:
-      VIALT_DOMAIN: ${VIALT_DOMAIN:-localhost}
+      VIALT_DOMAIN: ${VIALT_DOMAIN:?Define VIALT_DOMAIN en .env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    depends_on: [api]
-
-  api:
-    build: ./backend
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      VIALT_OLLAMA_BASE_URL: http://ollama:11434
-      VIALT_SEARXNG_BASE_URL: http://searxng:8080
-      VIALT_DB_FILE: /app/data/vialt.db
-      VIALT_VAULTS_DIR: /app/data/vaults
-    volumes:
-      - vialt-data:/app/data
-    expose: ["8000"]
-
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama-models:/root/.ollama
-    expose: ["11434"]
-
-  searxng:
-    image: searxng/searxng:latest
-    restart: unless-stopped
-    volumes:
-      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
-    expose: ["8080"]
 
 volumes:
-  vialt-data:
-  ollama-models:
   caddy-data:
   caddy-config:

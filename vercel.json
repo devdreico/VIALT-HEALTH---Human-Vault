@@ -1,6 +1,7 @@
 {
-    "experimentalServices":{
-        "web": {"entrypoint":"frontend","routePrefix":"/"},
-        "api": {"entrypoint":"backend/main.py","routePrefix":"/svc/api"}
-    }
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "installCommand": "npm --prefix frontend ci",
+    "buildCommand": "npm --prefix frontend run build",
+    "outputDirectory": "frontend/dist",
+    "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

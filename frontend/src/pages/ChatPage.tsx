@@ -52,7 +52,7 @@ export default function ChatPage() {
               if (ult?.role !== "assistant") return m;
               return [
                 ...m.slice(0, -1),
-                { ...ult, sources: d.sources, logPath: d.log },
+                { ...ult, sources: d.sources, logPath: d.log ?? undefined },
               ];
             }),
           error: (e) => setError(e),
@@ -128,10 +128,10 @@ export default function ChatPage() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">
-            💬 IA local · {nombre}
+            💬 IA médica · {nombre}
           </h1>
           <p className="text-xs text-muted">
-            lee tu vault ~ analiza ~ recomienda · sin diagnósticos
+            analiza el vault autorizado · recomienda · sin diagnósticos
           </p>
         </div>
         <Link to={`/vialt/${slug}`} className="shrink-0 text-xs text-accent hover:underline">
@@ -256,7 +256,7 @@ export default function ChatPage() {
         </button>
       </form>
       <p className="mt-2 text-center text-[10px] text-muted">
-        En esta PC de desarrollo la IA corre en CPU (~2 tokens/s). En el servidor con GPU será fluida.
+        La IA usa el proveedor Ollama configurado. No sustituye la valoración de un profesional de la salud.
       </p>
     </main>
   );

@@ -61,6 +61,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consentimiento, setConsentimiento] = useState(false);
 
   const [persona, setPersona] = useState({
     nombre: "",
@@ -107,6 +108,7 @@ export default function OnboardingPage() {
         medicaciones: items.medicaciones,
         alergias: items.alergias,
         vacunas: items.vacunas,
+        consentimiento,
       });
       navigate("/vialt/raiz");
     } catch (err) {
@@ -136,8 +138,7 @@ export default function OnboardingPage() {
         <section>
           <h1 className="text-xl font-semibold tracking-tight">Datos críticos</h1>
           <p className="mb-6 mt-1 text-sm text-muted">
-            La información primordial para un vault médico — todo queda en tus
-            archivos .md.
+            La información primordial para un vault médico, guardada de forma segura.
           </p>
           <div className="space-y-3">
             <div>
@@ -292,6 +293,19 @@ export default function OnboardingPage() {
 
       {error && <p className="mt-4 text-sm text-bad">{error}</p>}
 
+      {step === totalSteps - 1 && (
+        <label className="mt-5 flex items-start gap-2 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={consentimiento}
+            onChange={(event) => setConsentimiento(event.target.checked)}
+            className="mt-0.5"
+          />
+          Autorizo el tratamiento de estos datos sensibles de salud según la Ley 1581/2012.
+          Entiendo que la IA ofrece apoyo informativo y no diagnostica.
+        </label>
+      )}
+
       <div className="mt-8 flex items-center gap-3">
         {step > 0 && (
           <button
@@ -312,7 +326,7 @@ export default function OnboardingPage() {
         ) : (
           <button
             onClick={submit}
-            disabled={saving}
+            disabled={saving || !consentimiento}
             className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
             {saving ? "Escribiendo vault…" : "Generar mi VIALT"}

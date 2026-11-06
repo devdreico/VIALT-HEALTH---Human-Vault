@@ -1,0 +1,7 @@
+project_id = "vialts"
+
+[functions.chat]
+verify_jwt = true
+
+[functions.system-health]
+verify_jwt = false

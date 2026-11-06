@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 
 export interface User {
   id: string;
@@ -11,20 +10,17 @@ export interface User {
 interface AuthState {
   token: string | null;
   user: User | null;
+  initialized: boolean;
   setAuth: (token: string, user: User) => void;
   setUser: (user: User) => void;
   clear: () => void;
 }
 
-export const useAuth = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      user: null,
-      setAuth: (token, user) => set({ token, user }),
-      setUser: (user) => set({ user }),
-      clear: () => set({ token: null, user: null }),
-    }),
-    { name: "vialt-auth", storage: createJSONStorage(() => localStorage) },
-  ),
-);
+export const useAuth = create<AuthState>((set) => ({
+  token: null,
+  user: null,
+  initialized: false,
+  setAuth: (token, user) => set({ token, user, initialized: true }),
+  setUser: (user) => set({ user }),
+  clear: () => set({ token: null, user: null, initialized: true }),
+}));

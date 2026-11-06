@@ -1,36 +1,77 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api, BASE } from "../lib/api";
+import { api } from "../lib/api";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useAuth } from "../stores/auth";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from =
-    (location.state as { from?: string } | null)?.from ?? "/onboarding";
+  const from = (location.state as { from?: string } | null)?.from;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    api.authConfig().then((c) => setGoogleEnabled(c.google_enabled)).catch(() => setGoogleEnabled(false));
-  }, []);
+  const [googleEnabled, setGoogleEnabled] = useState(true);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const auth = await api.login({ email, password });
-      useAuth.getState().setAuth(auth.access_token, auth.user);
-      navigate(from, { replace: true });
+      if (!isSupabaseConfigured) throw new Error("Supabase no está configurado.");
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.session || !data.user) throw new Error("No se pudo iniciar la sesión.");
+      useAuth.getState().setAuth(data.session.access_token, {
+        id: data.user.id,
+        email: data.user.email ?? email,
+        nombre: String(data.user.user_metadata.nombre ?? data.user.user_metadata.full_name ?? data.user.email?.split("@")[0] ?? "Usuario"),
+        picture: data.user.user_metadata.avatar_url ?? null,
+      });
+      const { completado } = await api.onboardingStatus();
+      navigate(from ?? (completado ? "/" : "/onboarding"), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error de conexión");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function signInWithGoogle() {
+    setError(null);
+    setGoogleEnabled(false);
+    try {
+      if (!isSupabaseConfigured) throw new Error("Supabase no está configurado.");
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/success` },
+      });
+      if (authError) throw authError;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo iniciar OAuth con Google.");
+      setGoogleEnabled(true);
+    }
+  }
+
+  async function sendPasswordReset() {
+    setError(null);
+    setResetMessage(null);
+    if (!email.trim()) {
+      setError("Escribe tu correo para enviarte el enlace de recuperación.");
+      return;
+    }
+    try {
+      if (!isSupabaseConfigured) throw new Error("Supabase no está configurado.");
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      if (resetError) throw resetError;
+      setResetMessage("Si existe una cuenta con ese correo, recibirás un enlace para cambiar la contraseña.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar el enlace.");
     }
   }
 
@@ -44,8 +85,8 @@ export default function LoginPage() {
         <span className="block text-5xl font-bold text-accent">VIALT</span>
         <span className="mt-2 block text-sm text-muted">Human Vault · Saniver</span>
         <p className="mt-6 max-w-xs text-sm text-muted">
-          Tu biblioteca médica personal: vaults en .md que la IA local comprende de
-          inmediato. Guardado, análisis y recomendaciones — todo en tu servidor.
+          Tu biblioteca médica personal: datos estructurados, acceso protegido y
+          recomendaciones de IA basadas en el contexto de cada vault.
         </p>
       </section>
 
@@ -78,6 +119,14 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <button
+            type="button"
+            onClick={sendPasswordReset}
+            className="text-xs text-accent hover:underline"
+          >
+            Olvidé mi contraseña
+          </button>
+          {resetMessage && <p className="text-xs text-ok">{resetMessage}</p>}
           {error && <p className="text-sm text-bad">{error}</p>}
           <button
             type="submit"
@@ -93,19 +142,13 @@ export default function LoginPage() {
         </div>
 
         <button
-          onClick={() => (window.location.href = `${BASE}/api/auth/google`)}
-          disabled={googleEnabled !== true}
-          title={googleEnabled ? "" : "Google OAuth sin configurar en el backend"}
+          onClick={signInWithGoogle}
+          disabled={!googleEnabled || !isSupabaseConfigured}
+          title={!isSupabaseConfigured ? "Configura Supabase para habilitar el acceso" : ""}
           className="w-full rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:border-accent disabled:opacity-50"
         >
-          Continuar con Google
+            {googleEnabled ? "Continuar con Google" : "Conectando…"}
         </button>
-        {googleEnabled === false && (
-          <p className="mt-2 text-xs text-muted">
-            La conexión con Google no está configurada todavía — usa el registro local
-            mientras tanto.
-          </p>
-        )}
 
         <p className="mt-6 text-sm text-muted">
           ¿No tienes cuenta?{" "}

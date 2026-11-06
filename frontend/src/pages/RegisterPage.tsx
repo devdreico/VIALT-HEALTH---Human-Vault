@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useAuth } from "../stores/auth";
 
 export default function RegisterPage() {
@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,9 +22,31 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const auth = await api.register({ nombre, email, password });
-      useAuth.getState().setAuth(auth.access_token, auth.user);
-      navigate("/onboarding");
+      if (!isSupabaseConfigured) throw new Error("Supabase no está configurado.");
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            nombre: nombre.trim(),
+            consent_accepted: true,
+            consent_version: "1581-2012-v1",
+          },
+          emailRedirectTo: `${window.location.origin}/auth/success`,
+        },
+      });
+      if (authError) throw authError;
+      if (data.session && data.user) {
+        useAuth.getState().setAuth(data.session.access_token, {
+          id: data.user.id,
+          email: data.user.email ?? email,
+          nombre: nombre.trim(),
+          picture: null,
+        });
+        navigate("/onboarding");
+      } else {
+        setConfirmationSent(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error de conexión");
     } finally {
@@ -38,9 +61,14 @@ export default function RegisterPage() {
     <main className="mx-auto max-w-sm px-6 py-14">
       <h1 className="text-xl font-semibold tracking-tight">Crea tu cuenta</h1>
       <p className="mb-6 mt-1 text-sm text-muted">
-        En segundos tendrás tu token identificativo y tu vault médico listo para
-        llenarse.
+        Registra una cuenta para crear tu vault médico.
       </p>
+
+      {confirmationSent ? (
+        <p className="rounded-lg border border-border bg-surface p-4 text-sm">
+          Revisa tu correo para confirmar la cuenta y continuar con el onboarding.
+        </p>
+      ) : (
 
       <form onSubmit={submit} className="space-y-3">
         <input
@@ -93,6 +121,7 @@ export default function RegisterPage() {
           {loading ? "Creando cuenta…" : "Crear cuenta y vault"}
         </button>
       </form>
+      )}
 
       <p className="mt-6 text-sm text-muted">
         ¿Ya tienes cuenta?{" "}
